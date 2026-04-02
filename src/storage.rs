@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use chrono::{DateTime, Local, NaiveTime, TimeZone};
+use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use rusqlite::{Connection, params};
 use snafu::{ResultExt, Snafu};
 
@@ -78,6 +78,13 @@ pub enum Error {
     ParseDateTime {
         /// The string value that could not be parsed.
         value: String,
+    },
+
+    /// A local date-time could not be resolved unambiguously (e.g. DST gap/overlap).
+    #[snafu(display("Ambiguous or invalid local date-time: {detail}"))]
+    AmbiguousLocalDateTime {
+        /// Description of the ambiguous value.
+        detail: String,
     },
 
     /// Failed to begin a database transaction.
@@ -177,15 +184,18 @@ impl Storage {
     ///
     /// This operation is atomic: it deletes all existing meetings whose start time
     /// falls on today's date and inserts the new meetings within a single transaction.
+    /// All timestamps are stored as UTC RFC 3339 strings so that lexicographic
+    /// comparison in SQLite works correctly regardless of timezone offset.
     ///
     /// # Errors
     ///
+    /// Returns [`Error::AmbiguousLocalDateTime`] if today's boundaries cannot be computed.
     /// Returns [`Error::BeginTransaction`] if the transaction cannot be started.
     /// Returns [`Error::DeleteMeetings`] if the delete operation fails.
     /// Returns [`Error::InsertMeeting`] if any meeting insertion fails.
     /// Returns [`Error::CommitTransaction`] if the transaction cannot be committed.
     pub fn replace_today(&self, meetings: &[Meeting]) -> Result<()> {
-        let (today_start, today_end) = today_boundaries();
+        let (today_start, today_end) = today_boundaries()?;
         let start_str = today_start.to_rfc3339();
         let end_str = today_end.to_rfc3339();
 
@@ -206,13 +216,15 @@ impl Storage {
         }
 
         for meeting in meetings {
+            let start_utc = meeting.start_time.with_timezone(&Utc).to_rfc3339();
+            let end_utc = meeting.end_time.with_timezone(&Utc).to_rfc3339();
             let insert_result = self.conn.execute(
                 "INSERT OR REPLACE INTO meetings (id, title, start_time, end_time, conference_url, conference_type, raw_location, raw_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     meeting.id,
                     meeting.title,
-                    meeting.start_time.to_rfc3339(),
-                    meeting.end_time.to_rfc3339(),
+                    start_utc,
+                    end_utc,
                     meeting.conference_url,
                     meeting.conference_type.map(|ct| ct.to_string()),
                     meeting.raw_location,
@@ -238,12 +250,16 @@ impl Storage {
 
     /// Returns all meetings for today, sorted by start time in ascending order.
     ///
+    /// Timestamps are stored as UTC RFC 3339 strings and are converted back to
+    /// local time on retrieval.
+    ///
     /// # Errors
     ///
+    /// Returns [`Error::AmbiguousLocalDateTime`] if today's boundaries cannot be computed.
     /// Returns [`Error::QueryMeetings`] if the database query fails.
     /// Returns [`Error::ParseDateTime`] if a stored date-time value cannot be parsed.
     pub fn meetings_today(&self) -> Result<Vec<Meeting>> {
-        let (today_start, today_end) = today_boundaries();
+        let (today_start, today_end) = today_boundaries()?;
         let start_str = today_start.to_rfc3339();
         let end_str = today_end.to_rfc3339();
 
@@ -347,6 +363,9 @@ struct MeetingRow {
 
 /// Converts a raw database row into a [`Meeting`].
 ///
+/// Timestamps stored as UTC RFC 3339 strings are parsed and converted back to
+/// the local timezone.
+///
 /// # Errors
 ///
 /// Returns [`Error::ParseDateTime`] if the start or end time cannot be parsed from RFC 3339.
@@ -388,29 +407,49 @@ fn parse_rfc3339_local(value: &str) -> Result<DateTime<Local>> {
         })
 }
 
-/// Returns the start and end boundaries of today as `DateTime<Local>`.
+/// Returns the start and end boundaries of today as UTC `DateTime<Utc>`.
 ///
-/// The start is midnight (00:00:00) and the end is one second before midnight (23:59:59).
-fn today_boundaries() -> (DateTime<Local>, DateTime<Local>) {
+/// Computes the local-time boundaries (midnight and 23:59:59), converts them
+/// to UTC, and returns them as UTC timestamps. This ensures that RFC 3339
+/// string comparisons in SQLite work correctly regardless of timezone offset.
+///
+/// # Errors
+///
+/// Returns [`Error::AmbiguousLocalDateTime`] if midnight or end-of-day cannot
+/// be resolved unambiguously in the local timezone (e.g. during a DST transition).
+fn today_boundaries() -> Result<(DateTime<Utc>, DateTime<Utc>)> {
     let today = Local::now().date_naive();
 
-    // PANIC SAFETY: These NaiveTime values are hardcoded valid times.
-    let start_of_day = NaiveTime::from_hms_opt(0, 0, 0).expect("00:00:00 is always a valid time");
-    let end_of_day = NaiveTime::from_hms_opt(23, 59, 59).expect("23:59:59 is always a valid time");
+    // These NaiveTime values are hardcoded valid times, so `from_hms_opt`
+    // will always return `Some`.
+    let start_of_day =
+        NaiveTime::from_hms_opt(0, 0, 0).ok_or_else(|| Error::AmbiguousLocalDateTime {
+            detail: "00:00:00 could not be constructed".to_owned(),
+        })?;
+    let end_of_day =
+        NaiveTime::from_hms_opt(23, 59, 59).ok_or_else(|| Error::AmbiguousLocalDateTime {
+            detail: "23:59:59 could not be constructed".to_owned(),
+        })?;
 
     let start = today.and_time(start_of_day);
     let end = today.and_time(end_of_day);
 
     let local_start = Local
         .from_local_datetime(&start)
-        .single()
-        .expect("today's midnight should be unambiguous");
-    let local_end = Local
-        .from_local_datetime(&end)
-        .single()
-        .expect("today's 23:59:59 should be unambiguous");
+        .earliest()
+        .ok_or_else(|| Error::AmbiguousLocalDateTime {
+            detail: format!("midnight on {today} is ambiguous or invalid in local timezone"),
+        })?;
+    let local_end = Local.from_local_datetime(&end).earliest().ok_or_else(|| {
+        Error::AmbiguousLocalDateTime {
+            detail: format!("23:59:59 on {today} is ambiguous or invalid in local timezone"),
+        }
+    })?;
 
-    (local_start, local_end)
+    Ok((
+        local_start.with_timezone(&Utc),
+        local_end.with_timezone(&Utc),
+    ))
 }
 
 /// Extension trait to make `rusqlite::OptionalExtension` available.
@@ -438,8 +477,21 @@ mod tests {
     use chrono::TimeZone;
 
     fn make_meeting(id: &str, title: &str, hour: u32) -> Meeting {
-        let start = Local.with_ymd_and_hms(2026, 4, 2, hour, 0, 0).unwrap();
-        let end = Local.with_ymd_and_hms(2026, 4, 2, hour + 1, 0, 0).unwrap();
+        let today = Local::now().date_naive();
+        let start_naive = today
+            .and_hms_opt(hour, 0, 0)
+            .expect("test hour should be valid");
+        let start = Local
+            .from_local_datetime(&start_naive)
+            .earliest()
+            .expect("test start time should be unambiguous");
+        let end_naive = today
+            .and_hms_opt(hour + 1, 0, 0)
+            .expect("test end hour should be valid");
+        let end = Local
+            .from_local_datetime(&end_naive)
+            .earliest()
+            .expect("test end time should be unambiguous");
         Meeting {
             id: id.to_owned(),
             title: title.to_owned(),

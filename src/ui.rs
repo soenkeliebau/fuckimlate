@@ -39,9 +39,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// # Examples
 ///
-/// ```ignore
-/// // Meeting with conference URL:  "[09:00] - Standup"
-/// // Meeting without conference URL: "[12:00] ? Lunch"
+/// ```text
+/// Meeting with conference URL:  "[09:00] - Standup"
+/// Meeting without conference URL: "[12:00] ? Lunch"
 /// ```
 pub fn format_meeting(meeting: &Meeting) -> String {
     let time = meeting.start_time.format("%H:%M");

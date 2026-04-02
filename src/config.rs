@@ -239,12 +239,23 @@ impl Default for Config {
 impl Config {
     /// Parses a TOML string into a [`Config`], merging with defaults for any missing fields.
     ///
+    /// User-provided `[handlers]` entries are merged on top of the defaults so that
+    /// specifying e.g. only `[handlers.zoom]` does not discard the built-in handlers
+    /// for teams, meet, etc.
+    ///
     /// # Errors
     ///
     /// Returns [`Error::ParseConfig`] if the TOML content is invalid or does not match the
     /// expected schema.
     pub fn from_toml_str(toml_str: &str) -> Result<Self> {
-        let config: Config = toml::from_str(toml_str).context(ParseConfigSnafu)?;
+        let mut config: Config = toml::from_str(toml_str).context(ParseConfigSnafu)?;
+        // Merge user handlers on top of defaults so partial overrides don't
+        // lose the built-in handler entries.
+        let mut merged = default_handlers();
+        for (key, value) in config.handlers {
+            merged.insert(key, value);
+        }
+        config.handlers = merged;
         Ok(config)
     }
 
@@ -282,18 +293,19 @@ impl Config {
     ///
     /// Looks up the handler by the conference type's string representation (e.g. `"zoom"`,
     /// `"teams"`). If no specific handler is configured, falls back to the `"default"` handler.
+    /// If neither is present, returns a static fallback that uses `xdg-open`.
     pub fn handler_for_type(&self, conference_type: ConferenceType) -> &HandlerConfig {
+        static FALLBACK: std::sync::LazyLock<HandlerConfig> =
+            std::sync::LazyLock::new(|| HandlerConfig {
+                command: "xdg-open".to_owned(),
+                args: vec!["{url}".to_owned()],
+            });
+
         let key = conference_type.to_string();
         self.handlers
             .get(&key)
             .or_else(|| self.handlers.get("default"))
-            .unwrap_or_else(|| {
-                // PANIC: This is unreachable because `default_handlers()` always includes a
-                // "default" entry, and deserialization preserves it via `#[serde(default)]`.
-                // If somehow both the type-specific and "default" keys are missing, we have
-                // a programming error.
-                panic!("no default handler configured; this is a programming error")
-            })
+            .unwrap_or(&FALLBACK)
     }
 }
 
@@ -359,5 +371,24 @@ stale_threshold_minutes = 10
         assert_eq!(config.sync.stale_threshold_minutes, 10);
         assert_eq!(config.panic_mode.lookback_minutes, 15);
         assert_eq!(config.ui.fuzzel_command, "fuzzel");
+    }
+
+    #[test]
+    fn partial_handlers_merged_with_defaults() {
+        let toml_str = r#"
+[handlers.zoom]
+command = "zoom"
+args = ["--url", "{url}"]
+"#;
+        let config = Config::from_toml_str(toml_str).expect("should parse");
+        // User override applied
+        let zoom = config.handler_for_type(ConferenceType::Zoom);
+        assert_eq!(zoom.command, "zoom");
+        // Default handler still present
+        let teams = config.handler_for_type(ConferenceType::Teams);
+        assert_eq!(teams.command, "google-chrome");
+        // Default fallback still present
+        let unknown = config.handler_for_type(ConferenceType::Unknown);
+        assert_eq!(unknown.command, "xdg-open");
     }
 }

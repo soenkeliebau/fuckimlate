@@ -158,7 +158,12 @@ fn cmd_pick(config: &config::Config, storage_path: &Path) -> Result<()> {
 
     match ui::pick_meeting(&meetings, &config.ui).context(UiSnafu)? {
         Some(meeting) => {
-            handlers::launch_meeting(meeting, config).context(HandlerSnafu)?;
+            if let Err(e) = handlers::launch_meeting(meeting, config) {
+                // Show a desktop notification so the user sees the error even
+                // when running via fuzzel (where stderr is not visible).
+                let _ = handlers::notify_error(&e.to_string());
+                return Err(Error::Handler { source: e });
+            }
         }
         None => {
             // User dismissed fuzzel without selecting a meeting.

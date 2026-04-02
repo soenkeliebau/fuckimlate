@@ -57,6 +57,13 @@ pub enum Error {
         value: String,
     },
 
+    /// A local date-time could not be resolved unambiguously (e.g. DST gap/overlap).
+    #[snafu(display("Ambiguous or invalid local date-time: {detail}"))]
+    AmbiguousLocalDateTime {
+        /// Description of the ambiguous value.
+        detail: String,
+    },
+
     /// Failed to read or write the refresh token in the system keyring.
     #[snafu(display("Keyring operation failed: {detail}"))]
     Keyring {
@@ -207,6 +214,7 @@ impl CalendarClient {
     ///
     /// # Errors
     ///
+    /// Returns [`Error::AmbiguousLocalDateTime`] if today's midnight cannot be resolved.
     /// Returns [`Error::HttpRequest`] if the HTTP request fails.
     /// Returns [`Error::ApiRejection`] if the API returns a non-2xx status.
     /// Returns [`Error::ReadResponseBody`] if the response body cannot be read.
@@ -215,8 +223,8 @@ impl CalendarClient {
         let today = Local::now().date_naive();
         let tomorrow = today.succ_opt().unwrap_or(today);
 
-        let time_min = naive_date_to_rfc3339_local(today);
-        let time_max = naive_date_to_rfc3339_local(tomorrow);
+        let time_min = naive_date_to_rfc3339_local(today)?;
+        let time_max = naive_date_to_rfc3339_local(tomorrow)?;
 
         let url = format!(
             "https://www.googleapis.com/calendar/v3/calendars/{}/events",
@@ -543,17 +551,24 @@ fn extract_code_from_request(request_line: &str) -> Option<String> {
 }
 
 /// Converts a [`NaiveDate`] to an RFC 3339 timestamp string at midnight local time.
-fn naive_date_to_rfc3339_local(date: NaiveDate) -> String {
+///
+/// # Errors
+///
+/// Returns [`Error::AmbiguousLocalDateTime`] if midnight on the given date
+/// cannot be resolved in the local timezone (e.g. during a DST transition).
+fn naive_date_to_rfc3339_local(date: NaiveDate) -> Result<String> {
     let naive_dt = date
         .and_hms_opt(0, 0, 0)
-        // PANIC SAFETY: midnight is always a valid time.
-        .expect("midnight is always valid");
+        .ok_or_else(|| Error::AmbiguousLocalDateTime {
+            detail: format!("midnight on {date} could not be constructed"),
+        })?;
     let local_dt = Local
         .from_local_datetime(&naive_dt)
-        .single()
-        // PANIC SAFETY: midnight on a known date should be unambiguous.
-        .expect("midnight should be unambiguous");
-    local_dt.to_rfc3339()
+        .earliest()
+        .ok_or_else(|| Error::AmbiguousLocalDateTime {
+            detail: format!("midnight on {date} is ambiguous or invalid in local timezone"),
+        })?;
+    Ok(local_dt.to_rfc3339())
 }
 
 /// URL-encodes a string for use in URL path segments.
