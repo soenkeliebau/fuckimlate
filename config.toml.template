@@ -1,0 +1,64 @@
+# fuckimlate configuration
+# Copy to ~/.config/fuckimlate/config.toml and fill in your credentials.
+
+# ─── Google Calendar API ─────────────────────────────────────────────────────
+[calendar]
+# Required: OAuth2 credentials from Google Cloud Console.
+# Create at: https://console.cloud.google.com/apis/credentials
+# Enable the "Google Calendar API" for your project first.
+client_id = "<YOUR_CLIENT_ID>.apps.googleusercontent.com"
+client_secret = "<YOUR_CLIENT_SECRET>"
+
+# Calendar IDs to sync. Use "primary" for your main calendar.
+# Find other IDs in Google Calendar → Settings → calendar → "Calendar ID".
+calendar_ids = ["primary"]
+
+# ─── Sync behavior ───────────────────────────────────────────────────────────
+[sync]
+# How many minutes before pick/now triggers an automatic re-sync.
+# stale_threshold_minutes = 60
+
+# Override the default storage location for the meetings database.
+# Default: $XDG_DATA_HOME/fuckimlate/meetings.db
+# storage_path = "/path/to/meetings.db"
+
+# ─── Panic mode (fuckimlate now) ─────────────────────────────────────────────
+[panic]
+# Minutes after a meeting started to still consider it "just started".
+# lookback_minutes = 15
+
+# Minutes before a meeting starts to consider it "about to start".
+# lookahead_minutes = 5
+
+# ─── Conference handlers ─────────────────────────────────────────────────────
+# Use {url} as a placeholder for the meeting URL.
+# Only override the ones you want to change — defaults are merged automatically.
+#
+# Default handlers:
+#   zoom    → xdg-open {url}
+#   teams   → google-chrome --app={url}
+#   meet    → google-chrome --app={url}
+#   slack   → xdg-open {url}
+#   webex   → xdg-open {url}
+#   default → xdg-open {url}
+
+# [handlers.zoom]
+# command = "zoom"
+# args = ["--url", "{url}"]
+
+# [handlers.teams]
+# command = "chromium"
+# args = ["--app={url}"]
+
+# [handlers.meet]
+# command = "chromium"
+# args = ["--app={url}"]
+
+# [handlers.default]
+# command = "xdg-open"
+# args = ["{url}"]
+
+# ─── UI ──────────────────────────────────────────────────────────────────────
+[ui]
+# fuzzel_command = "fuzzel"
+# fuzzel_args = ["--dmenu"]
