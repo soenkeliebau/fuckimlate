@@ -15,6 +15,7 @@ use tracing::info;
 
 /// Top-level error type that wraps all module-specific errors.
 #[derive(Debug, Snafu)]
+#[snafu(visibility(pub))]
 pub enum Error {
     /// A configuration error occurred.
     #[snafu(display("Configuration error"))]
@@ -85,13 +86,17 @@ fn run(cli: cli::Cli) -> Result<()> {
     };
 
     let storage_path = config.sync.storage_path.clone().unwrap_or_else(|| {
-        let data_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from("~/.local/share"));
+        let data_dir = dirs::data_dir()
+            .or_else(|| dirs::home_dir().map(|h| h.join(".local/share")))
+            .unwrap_or_else(|| PathBuf::from("/tmp"));
         data_dir.join("fuckimlate").join("meetings.db")
     });
 
     // Ensure the parent directory exists (best-effort).
-    if let Some(parent) = storage_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    if let Some(parent) = storage_path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        tracing::debug!(error = %e, path = %parent.display(), "Failed to create data directory");
     }
 
     let command = cli.command.unwrap_or(cli::Command::Pick);
@@ -100,9 +105,10 @@ fn run(cli: cli::Cli) -> Result<()> {
         cli::Command::Sync => cmd_sync(&config, &storage_path)?,
         cli::Command::Pick => cmd_pick(&config, &storage_path)?,
         cli::Command::Now => cmd_now(&config, &storage_path)?,
-        cli::Command::Config => {
-            println!("{}", toml::to_string_pretty(&config).unwrap_or_default());
-        }
+        cli::Command::Config => match toml::to_string_pretty(&config) {
+            Ok(s) => println!("{s}"),
+            Err(e) => eprintln!("Failed to serialize config: {e}"),
+        },
     }
 
     Ok(())
@@ -151,19 +157,23 @@ fn cmd_pick(config: &config::Config, storage_path: &Path) -> Result<()> {
 
     let meetings = store.meetings_today().context(StorageSnafu)?;
     if meetings.is_empty() {
-        // Best-effort notification; ignore errors.
-        let _ = handlers::notify_error("No meetings today");
+        if let Err(e) = handlers::notify_error("No meetings today") {
+            tracing::debug!(error = %e, "Failed to send desktop notification");
+        }
         return Ok(());
     }
 
     match ui::pick_meeting(&meetings, &config.ui).context(UiSnafu)? {
         Some(meeting) => {
-            if let Err(e) = handlers::launch_meeting(meeting, config) {
+            let result = handlers::launch_meeting(meeting, config);
+            if let Err(ref e) = result {
                 // Show a desktop notification so the user sees the error even
                 // when running via fuzzel (where stderr is not visible).
-                let _ = handlers::notify_error(&e.to_string());
-                return Err(Error::Handler { source: e });
+                if let Err(notify_err) = handlers::notify_error(&e.to_string()) {
+                    tracing::debug!(error = %notify_err, "Failed to send desktop notification");
+                }
             }
+            result.context(HandlerSnafu)?;
         }
         None => {
             // User dismissed fuzzel without selecting a meeting.
@@ -180,8 +190,10 @@ fn cmd_now(config: &config::Config, storage_path: &Path) -> Result<()> {
     let meetings = store.meetings_today().context(StorageSnafu)?;
     let now = chrono::Local::now();
 
-    let lookback = chrono::Duration::minutes(config.panic_mode.lookback_minutes as i64);
-    let lookahead = chrono::Duration::minutes(config.panic_mode.lookahead_minutes as i64);
+    let lookback_mins = i64::try_from(config.panic_mode.lookback_minutes).unwrap_or(i64::MAX);
+    let lookahead_mins = i64::try_from(config.panic_mode.lookahead_minutes).unwrap_or(i64::MAX);
+    let lookback = chrono::Duration::minutes(lookback_mins);
+    let lookahead = chrono::Duration::minutes(lookahead_mins);
 
     let relevant: Vec<&model::Meeting> = meetings
         .iter()
@@ -194,8 +206,9 @@ fn cmd_now(config: &config::Config, storage_path: &Path) -> Result<()> {
 
     match relevant.len() {
         0 => {
-            // Best-effort notification; ignore errors.
-            let _ = handlers::notify_error("No meetings right now");
+            if let Err(e) = handlers::notify_error("No meetings right now") {
+                tracing::debug!(error = %e, "Failed to send desktop notification");
+            }
         }
         1 => {
             handlers::launch_meeting(relevant[0], config).context(HandlerSnafu)?;

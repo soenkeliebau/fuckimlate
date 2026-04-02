@@ -11,7 +11,7 @@ use crate::model::ConferenceType;
 
 /// Regex pattern that matches HTTP and HTTPS URLs in free-form text.
 static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    // SAFETY: this regex is a compile-time constant and is known to be valid.
+    // PANIC: Regex pattern is a compile-time constant known to be valid.
     #[allow(clippy::expect_used)]
     Regex::new(r#"https?://[^\s<>"']+"#).expect("URL regex is valid")
 });
@@ -24,13 +24,9 @@ static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// # Examples
 ///
-/// ```
-/// # use fuckimlate::extract::detect_conference_type;
-/// # use fuckimlate::model::ConferenceType;
-/// assert_eq!(
-///     detect_conference_type("https://us02web.zoom.us/j/123"),
-///     Some(ConferenceType::Zoom),
-/// );
+/// ```text
+/// let ct = detect_conference_type("https://us02web.zoom.us/j/123");
+/// assert_eq!(ct, Some(ConferenceType::Zoom));
 /// ```
 pub fn detect_conference_type(input: &str) -> Option<ConferenceType> {
     let parsed = Url::parse(input).ok()?;

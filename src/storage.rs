@@ -74,10 +74,12 @@ pub enum Error {
     },
 
     /// Failed to parse a stored date-time value.
-    #[snafu(display("Failed to parse date-time value: {value}"))]
+    #[snafu(display("Failed to parse date-time '{value}'"))]
     ParseDateTime {
         /// The string value that could not be parsed.
         value: String,
+        /// The underlying chrono parse error.
+        source: chrono::ParseError,
     },
 
     /// A local date-time could not be resolved unambiguously (e.g. DST gap/overlap).
@@ -335,14 +337,12 @@ impl Storage {
             None => Ok(true),
             Some(value) => {
                 let last_sync = DateTime::parse_from_rfc3339(&value)
-                    .ok()
-                    .map(|dt| dt.with_timezone(&Local))
-                    .ok_or_else(|| Error::ParseDateTime {
-                        value: value.clone(),
-                    })?;
+                    .context(ParseDateTimeSnafu { value: &value })?
+                    .with_timezone(&Local);
 
                 let elapsed = Local::now().signed_duration_since(last_sync);
-                let threshold = chrono::Duration::minutes(threshold_minutes as i64);
+                let threshold_mins = i64::try_from(threshold_minutes).unwrap_or(i64::MAX);
+                let threshold = chrono::Duration::minutes(threshold_mins);
                 Ok(elapsed > threshold)
             }
         }
@@ -373,13 +373,18 @@ fn row_to_meeting(row: MeetingRow) -> Result<Meeting> {
     let start_time = parse_rfc3339_local(&row.start_time)?;
     let end_time = parse_rfc3339_local(&row.end_time)?;
 
-    let conference_type = row
+    let conference_type = match row
         .conference_type
         .as_deref()
         .map(ConferenceType::from_str)
         .transpose()
-        .ok()
-        .flatten();
+    {
+        Ok(ct) => ct,
+        Err(e) => {
+            tracing::warn!(error = %e, "Unknown conference type in database, using None");
+            None
+        }
+    };
 
     Ok(Meeting {
         id: row.id,
@@ -399,12 +404,8 @@ fn row_to_meeting(row: MeetingRow) -> Result<Meeting> {
 ///
 /// Returns [`Error::ParseDateTime`] if the value cannot be parsed.
 fn parse_rfc3339_local(value: &str) -> Result<DateTime<Local>> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .map(|dt| dt.with_timezone(&Local))
-        .ok_or_else(|| Error::ParseDateTime {
-            value: value.to_owned(),
-        })
+    let parsed = DateTime::parse_from_rfc3339(value).context(ParseDateTimeSnafu { value })?;
+    Ok(parsed.with_timezone(&Local))
 }
 
 /// Returns the start and end boundaries of today as UTC `DateTime<Utc>`.

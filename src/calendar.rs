@@ -51,10 +51,12 @@ pub enum Error {
     },
 
     /// Failed to parse a date-time value from an event.
-    #[snafu(display("Failed to parse date-time value: {value}"))]
+    #[snafu(display("Failed to parse date-time '{value}'"))]
     ParseDateTime {
         /// The string value that could not be parsed.
         value: String,
+        /// The underlying chrono parse error.
+        source: chrono::ParseError,
     },
 
     /// A local date-time could not be resolved unambiguously (e.g. DST gap/overlap).
@@ -65,10 +67,12 @@ pub enum Error {
     },
 
     /// Failed to read or write the refresh token in the system keyring.
-    #[snafu(display("Keyring operation failed: {detail}"))]
+    #[snafu(display("Keyring operation failed: {operation}"))]
     Keyring {
-        /// Description of the keyring error.
-        detail: String,
+        /// Description of the keyring operation that failed.
+        operation: &'static str,
+        /// The underlying keyring error.
+        source: keyring::Error,
     },
 
     /// Failed to start the local TCP listener for the OAuth2 callback.
@@ -129,17 +133,24 @@ pub fn parse_event(json: &serde_json::Value) -> Option<Meeting> {
         return None;
     }
 
+    let id = json.get("id")?.as_str()?.to_owned();
     let start_str = start_obj.get("dateTime")?.as_str()?;
     let end_str = json.get("end")?.get("dateTime")?.as_str()?;
 
-    let start_time = DateTime::parse_from_rfc3339(start_str)
-        .ok()?
-        .with_timezone(&Local);
-    let end_time = DateTime::parse_from_rfc3339(end_str)
-        .ok()?
-        .with_timezone(&Local);
-
-    let id = json.get("id")?.as_str()?.to_owned();
+    let start_time = match DateTime::parse_from_rfc3339(start_str) {
+        Ok(dt) => dt.with_timezone(&Local),
+        Err(e) => {
+            warn!(error = %e, event_id = %id, "Failed to parse start time, skipping event");
+            return None;
+        }
+    };
+    let end_time = match DateTime::parse_from_rfc3339(end_str) {
+        Ok(dt) => dt.with_timezone(&Local),
+        Err(e) => {
+            warn!(error = %e, event_id = %id, "Failed to parse end time, skipping event");
+            return None;
+        }
+    };
     let title = json
         .get("summary")
         .and_then(|v| v.as_str())
@@ -221,7 +232,9 @@ impl CalendarClient {
     /// Returns [`Error::ParseResponse`] if the response JSON is invalid.
     pub fn fetch_today(&self, calendar_id: &str) -> Result<Vec<Meeting>> {
         let today = Local::now().date_naive();
-        let tomorrow = today.succ_opt().unwrap_or(today);
+        let tomorrow = today.succ_opt().ok_or(Error::ParseResponse {
+            detail: format!("Cannot compute the day after {today}"),
+        })?;
 
         let time_min = naive_date_to_rfc3339_local(today)?;
         let time_max = naive_date_to_rfc3339_local(tomorrow)?;
@@ -339,15 +352,15 @@ pub fn get_access_token(config: &CalendarConfig) -> Result<String> {
 /// Returns [`Error::Keyring`] if the keyring cannot be accessed (other than
 /// a "not found" condition).
 pub fn load_refresh_token() -> Result<Option<String>> {
-    let entry = keyring::Entry::new("fuckimlate", "refresh_token").map_err(|e| Error::Keyring {
-        detail: format!("Failed to create keyring entry: {e}"),
+    let entry = keyring::Entry::new("fuckimlate", "refresh_token").context(KeyringSnafu {
+        operation: "create keyring entry",
     })?;
 
     match entry.get_password() {
         Ok(token) => Ok(Some(token)),
         Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(Error::Keyring {
-            detail: format!("Failed to read refresh token from keyring: {e}"),
+        Err(e) => Err(e).context(KeyringSnafu {
+            operation: "load refresh token",
         }),
     }
 }
@@ -358,12 +371,12 @@ pub fn load_refresh_token() -> Result<Option<String>> {
 ///
 /// Returns [`Error::Keyring`] if the keyring write fails.
 pub fn save_refresh_token(token: &str) -> Result<()> {
-    let entry = keyring::Entry::new("fuckimlate", "refresh_token").map_err(|e| Error::Keyring {
-        detail: format!("Failed to create keyring entry: {e}"),
+    let entry = keyring::Entry::new("fuckimlate", "refresh_token").context(KeyringSnafu {
+        operation: "create keyring entry",
     })?;
 
-    entry.set_password(token).map_err(|e| Error::Keyring {
-        detail: format!("Failed to save refresh token to keyring: {e}"),
+    entry.set_password(token).context(KeyringSnafu {
+        operation: "save refresh token",
     })
 }
 
