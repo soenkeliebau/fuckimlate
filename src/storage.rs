@@ -1,5 +1,4 @@
 // SQLite-backed storage for meeting data and sync metadata.
-#![allow(dead_code)]
 
 use std::path::Path;
 use std::str::FromStr;
@@ -155,6 +154,7 @@ impl Storage {
     ///
     /// Returns [`Error::OpenInMemoryDatabase`] if the in-memory database cannot be created.
     /// Returns [`Error::CreateSchema`] if the schema creation statements fail.
+    #[cfg(test)]
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory().context(OpenInMemoryDatabaseSnafu)?;
         let store = Self { conn };

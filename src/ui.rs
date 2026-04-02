@@ -1,5 +1,4 @@
 // Fuzzel UI integration for displaying and selecting meetings.
-#![allow(dead_code)]
 
 use std::io::Write;
 use std::process::{Command, Stdio};

@@ -3,7 +3,6 @@
 // This module provides functions to fetch events from Google Calendar,
 // parse the API responses into `Meeting` structs, and handle the OAuth2
 // authorization flow for API access.
-#![allow(dead_code)]
 
 use std::io::{BufRead, BufReader, Write as IoWrite};
 use std::net::TcpListener;

@@ -1,7 +1,3 @@
-// Types in this module are foundational and will be consumed by other modules
-// (storage, extract, calendar, ui) as they are implemented.
-#![allow(dead_code)]
-
 use std::fmt;
 use std::str::FromStr;
 

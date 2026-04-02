@@ -2,7 +2,6 @@
 //
 // This module provides functions to detect conference system types from URLs
 // and extract conference dial-in information from calendar event fields.
-#![allow(dead_code)]
 
 use regex::Regex;
 use std::sync::LazyLock;

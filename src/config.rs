@@ -1,7 +1,3 @@
-// Types in this module are foundational and will be consumed by other modules
-// as they are implemented.
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 

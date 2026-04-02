@@ -1,6 +1,3 @@
-// Types in this module are not yet wired into the main entry point.
-#![allow(dead_code)]
-
 use std::process::{Command, Stdio};
 
 use snafu::{ResultExt, Snafu};
