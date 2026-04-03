@@ -49,6 +49,26 @@ impl fmt::Display for ConferenceType {
     }
 }
 
+impl ConferenceType {
+    /// Returns the XDG icon theme name(s) for this conference type.
+    ///
+    /// Names are comma-separated for fuzzel fallback support: the first name
+    /// is the preferred icon, subsequent names are tried if the preferred icon
+    /// is not found in the current icon theme.
+    // `dead_code` allowed: called by UI formatting code added in a subsequent task.
+    #[allow(dead_code)]
+    pub fn icon_name(self) -> &'static str {
+        match self {
+            Self::Zoom => "Zoom,video-call",
+            Self::Teams => "teams-for-linux,video-call",
+            Self::GoogleMeet => "google-meet,video-call",
+            Self::Slack => "slack,chat",
+            Self::WebEx => "webex,video-call",
+            Self::Unknown => "video-call",
+        }
+    }
+}
+
 impl FromStr for ConferenceType {
     type Err = Error;
 
@@ -115,5 +135,21 @@ mod tests {
     fn conference_type_from_str_invalid() {
         let result = ConferenceType::from_str("nonsense");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn conference_type_icon_names() {
+        assert_eq!(ConferenceType::Zoom.icon_name(), "Zoom,video-call");
+        assert_eq!(
+            ConferenceType::Teams.icon_name(),
+            "teams-for-linux,video-call"
+        );
+        assert_eq!(
+            ConferenceType::GoogleMeet.icon_name(),
+            "google-meet,video-call"
+        );
+        assert_eq!(ConferenceType::Slack.icon_name(), "slack,chat");
+        assert_eq!(ConferenceType::WebEx.icon_name(), "webex,video-call");
+        assert_eq!(ConferenceType::Unknown.icon_name(), "video-call");
     }
 }
