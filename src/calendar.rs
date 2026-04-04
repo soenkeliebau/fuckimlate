@@ -6,6 +6,7 @@
 
 use std::io::{BufRead, BufReader, Write as IoWrite};
 use std::net::TcpListener;
+use std::process::Stdio;
 
 use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use snafu::{ResultExt, Snafu};
@@ -424,6 +425,8 @@ pub fn authenticate(config: &CalendarConfig) -> Result<String> {
     info!("Opening browser for OAuth2 authorization");
     std::process::Command::new("xdg-open")
         .arg(&auth_url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .context(OpenBrowserSnafu)?;
 

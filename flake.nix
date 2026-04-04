@@ -36,7 +36,6 @@
           postInstall = ''
             wrapProgram "$out/bin/fuckimlate" \
               --prefix PATH : ${pkgs.lib.makeBinPath (with pkgs; [
-                fuzzel
                 libnotify
                 xdg-utils
               ])}
@@ -83,9 +82,10 @@
           checks = self.checks.${system};
 
           packages = with pkgs; [
+            pkg-config
+            dbus
             cargo-watch
             rust-analyzer
-            fuzzel
             libnotify
             xdg-utils
           ];

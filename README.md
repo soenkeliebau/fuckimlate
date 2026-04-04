@@ -62,17 +62,33 @@ fuckimlate config       # Print resolved configuration
 | Conference Type | Command | Notes |
 |----------------|---------|-------|
 | Zoom | `xdg-open` | Native client picks up the URL |
-| Teams | `google-chrome --app={url}` | Works better in Chromium |
-| Google Meet | `google-chrome --app={url}` | Works better in Chromium |
+| Teams | `google-chrome-stable {url}` | Works better in Chromium |
+| Google Meet | `google-chrome-stable {url}` | Works better in Chromium |
 | Slack | `xdg-open` | Slack client handles its URLs |
 | WebEx | `xdg-open` | |
 | Other | `xdg-open` | Fallback |
 
 Override any handler in your config file under `[handlers.<type>]`.
 
+## Icons
+
+When using fuzzel, meeting entries display conference-type icons from your installed icon theme. The following icon names are used (with fallbacks):
+
+| Conference Type | Icon name |
+|----------------|---------------------|
+| Zoom | `us.zoom.Zoom` |
+| Teams | `teams-for-linux` |
+| Google Meet | `google-meet` |
+| Slack | `slack` |
+| WebEx | `appointment-soon` |
+| Unknown | `appointment-soon` |
+| No conference | `appointment-soon` |
+
+Icon themes like [Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) provide good coverage. If an icon is not found in your theme, fuzzel silently skips it.
+
 ## Runtime Dependencies
 
-- `fuzzel` (Wayland dmenu)
+- `fuzzel` (Wayland dmenu) — preferred picker; if missing, falls back to `rofi`, then plain terminal input
 - `notify-send` (desktop notifications)
 - `xdg-utils` (xdg-open)
 - D-Bus + a secret service provider (GNOME Keyring, KWallet, etc.)

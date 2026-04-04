@@ -36,8 +36,8 @@ calendar_ids = ["primary"]
 #
 # Default handlers:
 #   zoom    → xdg-open {url}
-#   teams   → google-chrome --app={url}
-#   meet    → google-chrome --app={url}
+#   teams   → google-chrome-stable {url}
+#   meet    → google-chrome-stable {url}
 #   slack   → xdg-open {url}
 #   webex   → xdg-open {url}
 #   default → xdg-open {url}
@@ -48,17 +48,24 @@ calendar_ids = ["primary"]
 
 # [handlers.teams]
 # command = "chromium"
-# args = ["--app={url}"]
+# args = ["{url}"]
 
 # [handlers.meet]
 # command = "chromium"
-# args = ["--app={url}"]
+# args = ["{url}"]
 
 # [handlers.default]
 # command = "xdg-open"
 # args = ["{url}"]
 
 # ─── UI ──────────────────────────────────────────────────────────────────────
+# Picker fallback chain: fuzzel → rofi → terminal number input.
+# If fuzzel is not installed, rofi is tried next; if neither is found, a plain
+# numbered list is printed to the terminal and you select by typing a number.
 [ui]
 # fuzzel_command = "fuzzel"
-# fuzzel_args = ["--dmenu"]
+# fuzzel_args = ["--dmenu", "--width=60"]
+# To show conference-type icons, specify your icon theme:
+# fuzzel_args = ["--dmenu", "--icon-theme=Papirus"]
+# rofi_command = "rofi"
+# rofi_args = ["-dmenu"]

@@ -21,7 +21,6 @@
 , pkg-config
 , dbus
 , makeWrapper
-, fuzzel
 , libnotify
 , xdg-utils
 }:
@@ -46,7 +45,6 @@ rustPlatform.buildRustPackage {
   postInstall = ''
     wrapProgram "$out/bin/fuckimlate" \
       --prefix PATH : ${lib.makeBinPath [
-        fuzzel
         libnotify
         xdg-utils
       ]}

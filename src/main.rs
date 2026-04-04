@@ -9,6 +9,7 @@ mod ui;
 
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Local};
 use clap::Parser;
 use snafu::{ResultExt, Snafu};
 use tracing::info;
@@ -182,6 +183,29 @@ fn cmd_pick(config: &config::Config, storage_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// If there's exactly one ongoing-but-ending-soon meeting and exactly one
+/// upcoming meeting, return only the upcoming one. Otherwise return the
+/// list unchanged.
+fn prefer_upcoming_if_transitioning(
+    meetings: Vec<&model::Meeting>,
+    now: DateTime<Local>,
+    lookahead: chrono::Duration,
+) -> Vec<&model::Meeting> {
+    if meetings.len() != 2 {
+        return meetings;
+    }
+    let ending_soon: Vec<_> = meetings
+        .iter()
+        .filter(|m| m.start_time <= now && m.end_time > now && m.end_time - now <= lookahead)
+        .collect();
+    let upcoming: Vec<_> = meetings.iter().filter(|m| m.start_time > now).collect();
+    if ending_soon.len() == 1 && upcoming.len() == 1 {
+        vec![*upcoming[0]]
+    } else {
+        meetings
+    }
+}
+
 /// Auto-dials into the current or imminent meeting.
 fn cmd_now(config: &config::Config, storage_path: &Path) -> Result<()> {
     let store = storage::Storage::open(storage_path).context(StorageSnafu)?;
@@ -198,11 +222,16 @@ fn cmd_now(config: &config::Config, storage_path: &Path) -> Result<()> {
     let relevant: Vec<&model::Meeting> = meetings
         .iter()
         .filter(|m| {
+            let ongoing = m.start_time <= now && m.end_time > now;
             let started_recently = m.start_time <= now && now - m.start_time <= lookback;
             let starting_soon = m.start_time > now && m.start_time - now <= lookahead;
-            started_recently || starting_soon
+            ongoing || started_recently || starting_soon
         })
         .collect();
+
+    // When an ongoing meeting is ending soon and an upcoming meeting exists,
+    // prefer the upcoming one — the user likely wants to dial into the next call.
+    let relevant = prefer_upcoming_if_transitioning(relevant, now, lookahead);
 
     match relevant.len() {
         0 => {
@@ -222,4 +251,96 @@ fn cmd_now(config: &config::Config, storage_path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, TimeZone};
+
+    fn make_meeting(title: &str, start: DateTime<Local>, end: DateTime<Local>) -> model::Meeting {
+        model::Meeting {
+            id: title.to_owned(),
+            title: title.to_owned(),
+            start_time: start,
+            end_time: end,
+            conference_url: Some("https://example.com/meet".to_owned()),
+            conference_type: Some(model::ConferenceType::Zoom),
+            raw_location: None,
+            raw_description: None,
+        }
+    }
+
+    #[test]
+    fn transition_prefers_upcoming_meeting() {
+        let now = Local.with_ymd_and_hms(2026, 4, 4, 10, 57, 0).unwrap();
+        let lookahead = Duration::minutes(5);
+
+        let current = make_meeting(
+            "Current",
+            now - Duration::minutes(57),
+            now + Duration::minutes(3),
+        );
+        let upcoming = make_meeting(
+            "Upcoming",
+            now + Duration::minutes(3),
+            now + Duration::minutes(63),
+        );
+
+        let result = prefer_upcoming_if_transitioning(vec![&current, &upcoming], now, lookahead);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].title, "Upcoming");
+    }
+
+    #[test]
+    fn no_transition_when_current_not_ending_soon() {
+        let now = Local.with_ymd_and_hms(2026, 4, 4, 10, 40, 0).unwrap();
+        let lookahead = Duration::minutes(5);
+
+        let current = make_meeting(
+            "Current",
+            now - Duration::minutes(40),
+            now + Duration::minutes(20),
+        );
+        let upcoming = make_meeting(
+            "Upcoming",
+            now + Duration::minutes(3),
+            now + Duration::minutes(63),
+        );
+
+        let result = prefer_upcoming_if_transitioning(vec![&current, &upcoming], now, lookahead);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn single_ongoing_unchanged() {
+        let now = Local.with_ymd_and_hms(2026, 4, 4, 10, 30, 0).unwrap();
+        let lookahead = Duration::minutes(5);
+
+        let current = make_meeting(
+            "Current",
+            now - Duration::minutes(30),
+            now + Duration::minutes(30),
+        );
+
+        let result = prefer_upcoming_if_transitioning(vec![&current], now, lookahead);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].title, "Current");
+    }
+
+    #[test]
+    fn single_upcoming_unchanged() {
+        let now = Local.with_ymd_and_hms(2026, 4, 4, 10, 57, 0).unwrap();
+        let lookahead = Duration::minutes(5);
+
+        let upcoming = make_meeting(
+            "Upcoming",
+            now + Duration::minutes(3),
+            now + Duration::minutes(63),
+        );
+
+        let result = prefer_upcoming_if_transitioning(vec![&upcoming], now, lookahead);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].title, "Upcoming");
+    }
 }

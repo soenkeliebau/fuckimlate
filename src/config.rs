@@ -123,7 +123,9 @@ pub struct HandlerConfig {
     pub args: Vec<String>,
 }
 
-/// Configuration for the fuzzel-based user interface.
+/// Configuration for the picker-based user interface.
+///
+/// The picker uses a fallback chain: fuzzel → rofi → terminal input.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UiConfig {
     /// Path or name of the fuzzel binary.
@@ -132,6 +134,12 @@ pub struct UiConfig {
     /// Arguments to pass to fuzzel.
     #[serde(default = "default_fuzzel_args")]
     pub fuzzel_args: Vec<String>,
+    /// Path or name of the rofi binary.
+    #[serde(default = "default_rofi_command")]
+    pub rofi_command: String,
+    /// Arguments to pass to rofi.
+    #[serde(default = "default_rofi_args")]
+    pub rofi_args: Vec<String>,
 }
 
 /// Returns the default fuzzel command name.
@@ -141,7 +149,21 @@ fn default_fuzzel_command() -> String {
 
 /// Returns the default fuzzel arguments.
 fn default_fuzzel_args() -> Vec<String> {
-    vec!["--dmenu".to_owned()]
+    vec![
+        "--dmenu".to_owned(),
+        "--width=60".to_owned(),
+        "--icon-theme=Papirus".to_owned(),
+    ]
+}
+
+/// Returns the default rofi command name.
+fn default_rofi_command() -> String {
+    "rofi".to_owned()
+}
+
+/// Returns the default rofi arguments.
+fn default_rofi_args() -> Vec<String> {
+    vec!["-dmenu".to_owned()]
 }
 
 impl Default for UiConfig {
@@ -149,6 +171,8 @@ impl Default for UiConfig {
         Self {
             fuzzel_command: default_fuzzel_command(),
             fuzzel_args: default_fuzzel_args(),
+            rofi_command: default_rofi_command(),
+            rofi_args: default_rofi_args(),
         }
     }
 }
@@ -189,15 +213,15 @@ fn default_handlers() -> HashMap<String, HandlerConfig> {
     handlers.insert(
         "teams".to_owned(),
         HandlerConfig {
-            command: "google-chrome".to_owned(),
-            args: vec!["--app={url}".to_owned()],
+            command: "google-chrome-stable".to_owned(),
+            args: vec!["{url}".to_owned()],
         },
     );
     handlers.insert(
         "meet".to_owned(),
         HandlerConfig {
-            command: "google-chrome".to_owned(),
-            args: vec!["--app={url}".to_owned()],
+            command: "google-chrome-stable".to_owned(),
+            args: vec!["{url}".to_owned()],
         },
     );
     handlers.insert(
@@ -327,8 +351,8 @@ mod tests {
     fn default_handlers_teams_uses_chrome() {
         let config = Config::default();
         let teams_handler = config.handler_for_type(ConferenceType::Teams);
-        assert_eq!(teams_handler.command, "google-chrome");
-        assert!(teams_handler.args.iter().any(|a| a.contains("--app=")));
+        assert_eq!(teams_handler.command, "google-chrome-stable");
+        assert!(teams_handler.args.iter().any(|a| a.contains("{url}")));
     }
 
     #[test]
@@ -386,7 +410,7 @@ args = ["--url", "{url}"]
         assert_eq!(zoom.command, "zoom");
         // Default handler still present
         let teams = config.handler_for_type(ConferenceType::Teams);
-        assert_eq!(teams.command, "google-chrome");
+        assert_eq!(teams.command, "google-chrome-stable");
         // Default fallback still present
         let unknown = config.handler_for_type(ConferenceType::Unknown);
         assert_eq!(unknown.command, "xdg-open");

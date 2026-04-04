@@ -103,14 +103,14 @@ Configurable command templates per conference type. `{url}` placeholder substitu
 
 ### Default Handlers
 
-| Type | Command | Args |
-|---|---|---|
-| Zoom | `xdg-open` | `["{url}"]` |
-| Teams | `google-chrome` | `["--app={url}"]` |
-| GoogleMeet | `google-chrome` | `["--app={url}"]` |
-| Slack | `xdg-open` | `["{url}"]` |
-| WebEx | `xdg-open` | `["{url}"]` |
-| Default | `xdg-open` | `["{url}"]` |
+| Type | Command                | Args |
+|---|------------------------|---|
+| Zoom | `xdg-open`             | `["{url}"]` |
+| Teams | `google-chrome-stable` | `["--app={url}"]` |
+| GoogleMeet | `google-chrome-stable` | `["--app={url}"]` |
+| Slack | `xdg-open`             | `["{url}"]` |
+| WebEx | `xdg-open`             | `["{url}"]` |
+| Default | `xdg-open`             | `["{url}"]` |
 
 Teams and Meet default to Chrome because they work poorly in Firefox. Users override per handler in config.
 

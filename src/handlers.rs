@@ -117,11 +117,11 @@ mod tests {
     #[test]
     fn substitute_url_in_args() {
         let handler = HandlerConfig {
-            command: "google-chrome".to_owned(),
-            args: vec!["--app={url}".to_owned()],
+            command: "google-chrome-stable".to_owned(),
+            args: vec!["{url}".to_owned()],
         };
         let args = build_args(&handler, "https://meet.google.com/abc");
-        assert_eq!(args, vec!["--app=https://meet.google.com/abc"]);
+        assert_eq!(args, vec!["https://meet.google.com/abc"]);
     }
 
     #[test]
