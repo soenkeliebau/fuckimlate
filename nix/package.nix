@@ -33,7 +33,7 @@ rustPlatform.buildRustPackage {
 
   # Replace with the real hash after first build attempt.
   # Run `nix-build` once and Nix will report the correct hash.
-  cargoHash = lib.fakeHash;
+  cargoHash = "sha256-ULWwwS0q3/UyfRzWDL/Bl/XS+oYIgoA69yJrZaX147k=";
 
   nativeBuildInputs = [
     pkg-config
