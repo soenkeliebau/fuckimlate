@@ -1,6 +1,9 @@
 # fuckimlate
+This tool was born out of one too many occurences of me receiving a slack message "are you coming to the meeting?" and me thinking "fuck, I'm late!" and frantically searching through my calendar looking for dial in details..
 
-A CLI tool that extracts conference call dial-in information from Google Calendar and makes joining meetings as easy as possible. Uses a picker fallback chain for meeting selection: [fuzzel](https://codeberg.org/dnkl/fuzzel) (Wayland) → [rofi](https://github.com/davatorium/rofi) → plain terminal input — so it works everywhere from a tiling Wayland compositor to a bare SSH session.
+It extracts conference call dial-in information from Google Calendar and makes joining meetings as easy as possible. Uses a picker fallback chain for meeting selection: [fuzzel](https://codeberg.org/dnkl/fuzzel) (Wayland) → [rofi](https://github.com/davatorium/rofi) → plain terminal input — so it works everywhere from a tiling Wayland compositor to a bare SSH session.
+
+Plus it also has a "panic" mode, which simply dials you into whatever meeting your calendar says you should be in right now ..
 
 ## Setup
 
