@@ -31,6 +31,8 @@ rustPlatform.buildRustPackage {
 
   src = lib.cleanSource ./..;
 
+  # Replace with the real hash after first build attempt.
+  # Run `nix-build` once and Nix will report the correct hash.
   cargoHash = lib.fakeHash;
 
   nativeBuildInputs = [
@@ -53,7 +55,7 @@ rustPlatform.buildRustPackage {
   meta = with lib; {
     description = "Conference call dialer for Google Calendar";
     homepage = "https://github.com/soenkeliebau/fuckimlate";
-    license = licenses.mit;
+    license = licenses.asl20;
     mainProgram = "fuckimlate";
     platforms = platforms.linux;
   };

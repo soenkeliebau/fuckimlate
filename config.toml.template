@@ -64,8 +64,6 @@ calendar_ids = ["primary"]
 # numbered list is printed to the terminal and you select by typing a number.
 [ui]
 # fuzzel_command = "fuzzel"
-# fuzzel_args = ["--dmenu", "--width=60"]
-# To show conference-type icons, specify your icon theme:
-# fuzzel_args = ["--dmenu", "--icon-theme=Papirus"]
+# fuzzel_args = ["--dmenu", "--width=60", "--icon-theme=Papirus"]
 # rofi_command = "rofi"
 # rofi_args = ["-dmenu"]

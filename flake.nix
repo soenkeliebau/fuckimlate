@@ -46,7 +46,7 @@
           meta = with pkgs.lib; {
             description = "Conference call dialer for Google Calendar";
             homepage = "https://github.com/soenkeliebau/fuckimlate";
-            license = licenses.mit;
+            license = licenses.asl20;
             mainProgram = "fuckimlate";
           };
         });
